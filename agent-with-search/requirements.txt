@@ -1,0 +1,17 @@
+agent-framework
+python-dotenv
+mem0ai
+azure-search-documents
+azure-identity
+pypdf
+python-docx
+openai
+requests
+pandas
+openpyxl
+pillow
+pytesseract
+azure-ai-formrecognizer
+streamlit
+streamlit-chat
+nest-asyncio
