@@ -442,7 +442,7 @@ The application can be deployed to Azure Container Apps for production use.
      --set-env-vars \
        AZURE_OPENAI_API_KEY=secretref:azure-openai-key \
        AZURE_OPENAI_ENDPOINT=<endpoint> \
-       # ... other env vars
+       # See Step 6 in the Entra ID Setup section for the complete list of required environment variables
    ```
 
 6. **Update Entra ID Redirect URIs**
