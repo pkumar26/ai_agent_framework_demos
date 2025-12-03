@@ -378,10 +378,6 @@ This is a demo project for learning purposes.
 
 The application can be deployed to Azure Container Apps for production use.
 
-### Live Demo
-
-🌐 **Production URL**: https://ai-agent-app.politeplant-719169d5.westus2.azurecontainerapps.io
-
 ### Deployment Architecture
 
 ```
