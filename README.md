@@ -22,6 +22,7 @@ Advanced AI agent with vector search, document processing, and user memory capab
 - Mem0 (User memory)
 - Streamlit (Web UI)
 - **Microsoft Entra ID** (OAuth 2.0 authentication)
+- **Azure Container Apps** (Production deployment)
 - Python 3.13+
 
 ### 2. Basic Agent Memory (`basic-agent-memory/`)
@@ -52,6 +53,8 @@ Minimal AI agent implementation demonstrating core chat functionality.
 - Azure AI Search resource
 - Mem0 account and API key
 - **Microsoft Entra ID App Registration** (for authentication)
+- **Docker** (for container deployment)
+- **Azure CLI** (for deployment commands)
 - (Optional) Tesseract OCR for image processing
 
 ## 🔐 Entra ID Setup (Required for Authentication)
@@ -65,7 +68,7 @@ To enable Microsoft Entra ID authentication, follow these steps:
 3. Configure:
    - **Name**: `AI Agent Demo` (or your preferred name)
    - **Supported account types**: `Accounts in this organizational directory only`
-   - **Redirect URI**: Select `Single-page application` and add:
+   - **Redirect URI**: Select **Web** and add:
      - `http://localhost:8501` (for Streamlit local dev)
 4. Click **Register**
 
@@ -75,15 +78,23 @@ After registration, note these values from the **Overview** page:
 - **Application (client) ID**: `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`
 - **Directory (tenant) ID**: `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`
 
-### Step 3: Configure Authentication
+### Step 3: Create Client Secret
+
+1. Go to **Certificates & secrets** → **Client secrets**
+2. Click **+ New client secret**
+3. Add description (e.g., `Streamlit App`) and set expiry
+4. Click **Add**
+5. **Copy the Value immediately** (you won't see it again!)
+
+### Step 4: Configure Authentication
 
 1. Go to **Authentication** in your app registration
-2. Under **Single-page application**, ensure redirect URIs include:
-   - `http://localhost:8501` (Streamlit)
+2. Under **Web** platform, ensure redirect URIs include:
+   - `http://localhost:8501`
    - `http://localhost:8501/` (with trailing slash)
-3. Enable **Access tokens** and **ID tokens** under Implicit grant
+3. Under **Implicit grant and hybrid flows**, you can leave these unchecked (we use authorization code flow with PKCE)
 
-### Step 4: API Permissions (Optional)
+### Step 5: API Permissions (Optional)
 
 For basic profile access, default permissions are sufficient. For custom API access:
 
@@ -91,13 +102,14 @@ For basic profile access, default permissions are sufficient. For custom API acc
 2. Add a scope (e.g., `user_impersonation`)
 3. Go to **API permissions** → Add permission → My APIs → Select your scope
 
-### Step 5: Update Environment Variables
+### Step 6: Update Environment Variables
 
 Add to your `agent-with-search/.env`:
 ```env
 # Entra ID Authentication
 ENTRA_TENANT_ID=your-tenant-id
 ENTRA_CLIENT_ID=your-client-id
+ENTRA_CLIENT_SECRET=your-client-secret-value
 ENTRA_REDIRECT_URI=http://localhost:8501
 # Optional: Custom API scope
 ENTRA_API_SCOPE=api://your-client-id/user_impersonation
@@ -151,6 +163,7 @@ ENTRA_API_SCOPE=api://your-client-id/user_impersonation
    # Entra ID Authentication
    ENTRA_TENANT_ID=your-tenant-id
    ENTRA_CLIENT_ID=your-client-id
+   ENTRA_CLIENT_SECRET=your-client-secret-value
    ENTRA_REDIRECT_URI=http://localhost:8501
    # ENTRA_API_SCOPE=api://your-client-id/user_impersonation  # Optional
    ```
@@ -240,10 +253,10 @@ python main.py
 
 The `agent-with-search` project now supports Microsoft Entra ID authentication:
 
-- **OAuth 2.0 + PKCE** - Industry-standard secure authentication for SPAs
+- **OAuth 2.0 + PKCE** - Industry-standard secure authentication
+- **Client Secret** - Server-side token exchange (keep secret secure!)
 - **Device Code Flow** - For CLI applications without browser access
 - **User Identity** - Email/UPN used as user_id for document access control
-- **No Client Secret** - Public client authentication (safe for SPAs)
 
 ### Document Access Control
 
@@ -361,6 +374,94 @@ Feel free to extend these implementations with:
 
 This is a demo project for learning purposes.
 
+## 🚀 Deployment to Azure Container Apps
+
+The application can be deployed to Azure Container Apps for production use.
+
+### Live Demo
+
+🌐 **Production URL**: https://ai-agent-app.politeplant-719169d5.westus2.azurecontainerapps.io
+
+### Deployment Architecture
+
+```
+┌─────────────────┐      ┌──────────────────┐
+│  Azure Container│      │  Azure Container │
+│    Registry     │─────>│      Apps        │
+│  (Docker Image) │      │   (Streamlit)    │
+└─────────────────┘      └────────┬─────────┘
+                                  │
+                    ┌─────────────┼─────────────┐
+                    │             │             │
+                    v             v             v
+            ┌───────────┐ ┌───────────┐ ┌───────────┐
+            │  Entra ID │ │Azure OpenAI│ │ AI Search │
+            │  (Auth)   │ │  (LLM)    │ │ (Vector)  │
+            └───────────┘ └───────────┘ └───────────┘
+```
+
+### Deploy Your Own Instance
+
+1. **Create Azure Container Registry**
+   ```bash
+   az acr create --resource-group <rg-name> --name <acr-name> --sku Basic --admin-enabled true
+   ```
+
+2. **Build and Push Docker Image**
+   ```bash
+   cd agent-with-search
+   az acr build --registry <acr-name> --image ai-agent-app:v1 .
+   ```
+
+3. **Create Container Apps Environment**
+   ```bash
+   az containerapp env create --name <env-name> --resource-group <rg-name> --location <location>
+   ```
+
+4. **Deploy Container App**
+   ```bash
+   az containerapp create \
+     --name ai-agent-app \
+     --resource-group <rg-name> \
+     --environment <env-name> \
+     --image <acr-name>.azurecr.io/ai-agent-app:v1 \
+     --registry-server <acr-name>.azurecr.io \
+     --target-port 8501 \
+     --ingress external \
+     --cpu 1 --memory 2Gi
+   ```
+
+5. **Configure Secrets and Environment Variables**
+   ```bash
+   # Add secrets
+   az containerapp secret set --name ai-agent-app --resource-group <rg-name> \
+     --secrets azure-openai-key=<key> azure-search-key=<key> mem0-api-key=<key> entra-client-secret=<secret>
+   
+   # Set environment variables
+   az containerapp update --name ai-agent-app --resource-group <rg-name> \
+     --set-env-vars \
+       AZURE_OPENAI_API_KEY=secretref:azure-openai-key \
+       AZURE_OPENAI_ENDPOINT=<endpoint> \
+       # ... other env vars
+   ```
+
+6. **Update Entra ID Redirect URIs**
+   ```bash
+   az ad app update --id <client-id> \
+     --web-redirect-uris "http://localhost:8501" "https://<your-app>.azurecontainerapps.io"
+   ```
+
+### Redeploy After Code Changes
+
+```bash
+# Build new version
+az acr build --registry <acr-name> --image ai-agent-app:v2 .
+
+# Update container app
+az containerapp update --name ai-agent-app --resource-group <rg-name> \
+  --image <acr-name>.azurecr.io/ai-agent-app:v2
+```
+
 ## 🆘 Troubleshooting
 
 ### Common Issues
@@ -397,6 +498,8 @@ This is a demo project for learning purposes.
 - **v2.0** - Added vector search and document processing
 - **v3.0** - Implemented privacy controls and document sharing
 - **v4.0** - Enhanced UI and multi-format support
+- **v5.0** - Added Microsoft Entra ID authentication (OAuth 2.0 + PKCE)
+- **v6.0** - Deployed to Azure Container Apps with Docker
 
 ---
 
